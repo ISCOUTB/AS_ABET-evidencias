@@ -1,5 +1,5 @@
 # Configuración de la base de datos Moodle en Azure
-DB_HOST=http://20.81.213.16/
+DB_HOST=mysql
 DB_PORT=3306
 DB_USER=alpyuser
 DB_PASSWORD=alpypass

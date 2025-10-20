@@ -37,10 +37,11 @@ DB_CONFIG = {
 # Modelos Pydantic
 class StudentOutcome(BaseModel):
     id: int
-    course: Optional[int]
-    name: str
-    description: Optional[str]
-    descriptionformat: Optional[int]
+    so_number: Optional[str]
+    title_en: Optional[str]
+    title_es: Optional[str]
+    description_en: Optional[str]
+    description_es: Optional[str]
     sortorder: Optional[int]
     timecreated: Optional[int]
     timemodified: Optional[int]
@@ -49,19 +50,22 @@ class Indicator(BaseModel):
     id: int
     outcomeid: int
     name: str
-    description: Optional[str]
-    descriptionformat: Optional[int]
-    sortorder: Optional[int]
-    timecreated: Optional[int]
-    timemodified: Optional[int]
+    description: str
+    descriptionformat: int
+    sortorder: int
+    timecreated: int
+    timemodified: int
 
 class PerformanceLevel(BaseModel):
-    id: int
-    indicatorid: int
-    level: int
-    name: str
-    description: Optional[str]
-    score: Optional[float]
+    id: Optional[int]
+    indicator_id: Optional[int]
+    title_en: Optional[str]
+    title_es: Optional[str]
+    description_en: Optional[str]
+    description_es: Optional[str]
+    minscore: Optional[float]
+    maxscore: Optional[float]
+    sortorder: Optional[int]
     timecreated: Optional[int]
     timemodified: Optional[int]
 
@@ -120,7 +124,6 @@ def health_check():
 # ==================== STUDENT OUTCOMES ====================
 @app.get("/api/outcomes", response_model=List[StudentOutcome])
 def get_outcomes(
-    course_id: Optional[int] = Query(None, description="Filtrar por ID de curso"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0)
 ):
@@ -130,20 +133,10 @@ def get_outcomes(
     try:
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        
-        query = "SELECT * FROM mdl_gradingform_utb_outcomes"
-        params = []
-        
-        if course_id is not None:
-            query += " WHERE course = %s"
-            params.append(course_id)
-        
-        query += " ORDER BY sortorder, id LIMIT %s OFFSET %s"
-        params.extend([limit, offset])
-        
+        query = "SELECT * FROM mdl_gradingform_utb_outcomes ORDER BY sortorder, id LIMIT %s OFFSET %s"
+        params = [limit, offset]
         cursor.execute(query, params)
         results = cursor.fetchall()
-        
         return results
     except Error as e:
         raise HTTPException(status_code=500, detail=f"Error al consultar outcomes: {str(e)}")
@@ -185,21 +178,32 @@ def get_indicators(
     try:
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        
+
         query = "SELECT * FROM mdl_gradingform_utb_indicators"
         params = []
-        
+
         if outcome_id is not None:
             query += " WHERE outcomeid = %s"
             params.append(outcome_id)
-        
-        query += " ORDER BY sortorder, id LIMIT %s OFFSET %s"
+
+        query += " ORDER BY id LIMIT %s OFFSET %s"
         params.extend([limit, offset])
-        
+
         cursor.execute(query, params)
         results = cursor.fetchall()
-        
-        return results
+        indicators = []
+        for row in results:
+            indicators.append({
+                "id": row["id"],
+                "outcomeid": row["student_outcome_id"],
+                "name": row["indicator_letter"],
+                "description": row["description_en"],
+                "descriptionformat": 1,
+                "sortorder": row["id"],
+                "timecreated": row["timecreated"],
+                "timemodified": row["timemodified"]
+            })
+        return indicators
     except Error as e:
         raise HTTPException(status_code=500, detail=f"Error al consultar indicators: {str(e)}")
     finally:
@@ -240,20 +244,19 @@ def get_levels(
     try:
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        
+
         query = "SELECT * FROM mdl_gradingform_utb_lvl"
         params = []
-        
+
         if indicator_id is not None:
             query += " WHERE indicatorid = %s"
             params.append(indicator_id)
-        
-        query += " ORDER BY level, id LIMIT %s OFFSET %s"
+
+        query += " ORDER BY id LIMIT %s OFFSET %s"
         params.extend([limit, offset])
-        
+
         cursor.execute(query, params)
         results = cursor.fetchall()
-        
         return results
     except Error as e:
         raise HTTPException(status_code=500, detail=f"Error al consultar levels: {str(e)}")
