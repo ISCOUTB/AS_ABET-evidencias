@@ -34,69 +34,78 @@ DB_CONFIG = {
     'database': os.getenv('DB_NAME', 'moodle')
 }
 
-# Modelos Pydantic
-class StudentOutcome(BaseModel):
-    id: int
-    so_number: Optional[str]
-    title_en: Optional[str]
-    title_es: Optional[str]
-    description_en: Optional[str]
-    description_es: Optional[str]
-    sortorder: Optional[int]
-    timecreated: Optional[int]
-    timemodified: Optional[int]
+# ==================== MODELOS PYDANTIC ====================
 
-class Indicator(BaseModel):
+class OutcomeFull(BaseModel):
     id: int
-    outcomeid: int
-    name: str
-    description: str
-    descriptionformat: int
+    so_number: str
+    title_en: str
+    title_es: str
+    description_en: str
+    description_es: str
     sortorder: int
     timecreated: int
     timemodified: int
 
-class PerformanceLevel(BaseModel):
-    id: Optional[int]
-    indicator_id: Optional[int]
-    title_en: Optional[str]
-    title_es: Optional[str]
-    description_en: Optional[str]
-    description_es: Optional[str]
-    minscore: Optional[float]
-    maxscore: Optional[float]
-    sortorder: Optional[int]
-    timecreated: Optional[int]
-    timemodified: Optional[int]
+class IndicatorFull(BaseModel):
+    id: int
+    student_outcome_id: int
+    indicator_letter: str
+    description_en: str
+    description_es: str
+    timecreated: int
+    timemodified: int
 
-class Evaluation(BaseModel):
+class LevelFull(BaseModel):
+    id: int
+    indicator_id: int
+    title_en: str
+    title_es: str
+    description_en: str
+    description_es: str
+    minscore: float
+    maxscore: float
+    sortorder: int
+    timecreated: int
+    timemodified: int
+
+class EvaluationFull(BaseModel):
     id: int
     instanceid: int
     studentid: int
-    indicatorid: int
-    levelid: int
-    remark: Optional[str]
-    evaluatorid: Optional[int]
-    timecreated: Optional[int]
-    timemodified: Optional[int]
+    courseid: int
+    activityid: int
+    activityname: str
+    student_outcome_id: int
+    indicator_id: int
+    performance_level_id: int
+    score: float
+    feedback: str | None = None
+    timecreated: int
+    timemodified: int
 
-# Función para obtener conexión a la base de datos
+# ==================== FUNCIONES DE BASE DE DATOS ====================
+
 def get_db_connection():
+    """Obtener conexión a la base de datos"""
     try:
         connection = mysql.connector.connect(**DB_CONFIG)
         return connection
     except Error as e:
         raise HTTPException(status_code=500, detail=f"Error de conexión a la base de datos: {str(e)}")
 
-# Función para cerrar conexión
 def close_db_connection(connection, cursor):
+    """Cerrar conexión a la base de datos"""
     if cursor:
         cursor.close()
     if connection and connection.is_connected():
         connection.close()
 
+# ==================== ENDPOINTS PRINCIPALES ====================
+
 @app.get("/")
 def read_root():
+    """Endpoint raíz con información de la API"""
     return {
         "message": "API de Moodle Grading Forms",
         "version": "1.0.0",
@@ -104,7 +113,8 @@ def read_root():
             "outcomes": "/api/outcomes",
             "indicators": "/api/indicators",
             "levels": "/api/levels",
-            "evaluations": "/api/evaluations"
+            "evaluations": "/api/evaluations",
+            "health": "/health"
         }
     }
 
@@ -121,231 +131,82 @@ def health_check():
     except Exception as e:
         return {"status": "unhealthy", "database": "disconnected", "error": str(e)}
 
-# ==================== STUDENT OUTCOMES ====================
-@app.get("/api/outcomes", response_model=List[StudentOutcome])
-def get_outcomes(
-    limit: int = Query(100, ge=1, le=1000),
-    offset: int = Query(0, ge=0)
-):
+# ==================== ENDPOINTS DE DATOS ====================
+
+@app.get("/api/outcomes", response_model=list[OutcomeFull])
+def get_all_outcomes():
     """Obtener todos los Student Outcomes"""
     connection = None
     cursor = None
     try:
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        query = "SELECT * FROM mdl_gradingform_utb_outcomes ORDER BY sortorder, id LIMIT %s OFFSET %s"
-        params = [limit, offset]
-        cursor.execute(query, params)
+        query = "SELECT id, so_number, title_en, title_es, description_en, description_es, sortorder, timecreated, timemodified FROM mdl_gradingform_utb_outcomes"
+        cursor.execute(query)
         results = cursor.fetchall()
-        return results
+        outcomes = [OutcomeFull(**row) for row in results]
+        return outcomes
     except Error as e:
         raise HTTPException(status_code=500, detail=f"Error al consultar outcomes: {str(e)}")
     finally:
         close_db_connection(connection, cursor)
 
-@app.get("/api/outcomes/{outcome_id}", response_model=StudentOutcome)
-def get_outcome_by_id(outcome_id: int):
-    """Obtener un Student Outcome específico por ID"""
+@app.get("/api/indicators", response_model=list[IndicatorFull])
+def get_all_indicators():
+    """Obtener todos los Indicators"""
     connection = None
     cursor = None
     try:
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        
-        query = "SELECT * FROM mdl_gradingform_utb_outcomes WHERE id = %s"
-        cursor.execute(query, (outcome_id,))
-        result = cursor.fetchone()
-        
-        if not result:
-            raise HTTPException(status_code=404, detail="Outcome no encontrado")
-        
-        return result
-    except Error as e:
-        raise HTTPException(status_code=500, detail=f"Error al consultar outcome: {str(e)}")
-    finally:
-        close_db_connection(connection, cursor)
-
-# ==================== INDICATORS ====================
-@app.get("/api/indicators", response_model=List[Indicator])
-def get_indicators(
-    outcome_id: Optional[int] = Query(None, description="Filtrar por ID de outcome"),
-    limit: int = Query(100, ge=1, le=1000),
-    offset: int = Query(0, ge=0)
-):
-    """Obtener todos los indicadores de evaluación"""
-    connection = None
-    cursor = None
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-
-        query = "SELECT * FROM mdl_gradingform_utb_indicators"
-        params = []
-
-        if outcome_id is not None:
-            query += " WHERE outcomeid = %s"
-            params.append(outcome_id)
-
-        query += " ORDER BY id LIMIT %s OFFSET %s"
-        params.extend([limit, offset])
-
-        cursor.execute(query, params)
+        query = "SELECT id, student_outcome_id, indicator_letter, description_en, description_es, timecreated, timemodified FROM mdl_gradingform_utb_indicators"
+        cursor.execute(query)
         results = cursor.fetchall()
-        indicators = []
-        for row in results:
-            indicators.append({
-                "id": row["id"],
-                "outcomeid": row["student_outcome_id"],
-                "name": row["indicator_letter"],
-                "description": row["description_en"],
-                "descriptionformat": 1,
-                "sortorder": row["id"],
-                "timecreated": row["timecreated"],
-                "timemodified": row["timemodified"]
-            })
+        indicators = [IndicatorFull(**row) for row in results]
         return indicators
     except Error as e:
         raise HTTPException(status_code=500, detail=f"Error al consultar indicators: {str(e)}")
     finally:
         close_db_connection(connection, cursor)
 
-@app.get("/api/indicators/{indicator_id}", response_model=Indicator)
-def get_indicator_by_id(indicator_id: int):
-    """Obtener un indicador específico por ID"""
+@app.get("/api/levels", response_model=list[LevelFull])
+def get_all_levels():
+    """Obtener todos los Performance Levels"""
     connection = None
     cursor = None
     try:
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        
-        query = "SELECT * FROM mdl_gradingform_utb_indicators WHERE id = %s"
-        cursor.execute(query, (indicator_id,))
-        result = cursor.fetchone()
-        
-        if not result:
-            raise HTTPException(status_code=404, detail="Indicador no encontrado")
-        
-        return result
-    except Error as e:
-        raise HTTPException(status_code=500, detail=f"Error al consultar indicador: {str(e)}")
-    finally:
-        close_db_connection(connection, cursor)
-
-# ==================== PERFORMANCE LEVELS ====================
-@app.get("/api/levels", response_model=List[PerformanceLevel])
-def get_levels(
-    indicator_id: Optional[int] = Query(None, description="Filtrar por ID de indicador"),
-    limit: int = Query(100, ge=1, le=1000),
-    offset: int = Query(0, ge=0)
-):
-    """Obtener todos los niveles de desempeño"""
-    connection = None
-    cursor = None
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-
-        query = "SELECT * FROM mdl_gradingform_utb_lvl"
-        params = []
-
-        if indicator_id is not None:
-            query += " WHERE indicatorid = %s"
-            params.append(indicator_id)
-
-        query += " ORDER BY id LIMIT %s OFFSET %s"
-        params.extend([limit, offset])
-
-        cursor.execute(query, params)
+        query = "SELECT id, indicator_id, title_en, title_es, description_en, description_es, minscore, maxscore, sortorder, timecreated, timemodified FROM mdl_gradingform_utb_lvl"
+        cursor.execute(query)
         results = cursor.fetchall()
-        return results
+        levels = [LevelFull(**row) for row in results]
+        return levels
     except Error as e:
         raise HTTPException(status_code=500, detail=f"Error al consultar levels: {str(e)}")
     finally:
         close_db_connection(connection, cursor)
 
-@app.get("/api/levels/{level_id}", response_model=PerformanceLevel)
-def get_level_by_id(level_id: int):
-    """Obtener un nivel de desempeño específico por ID"""
+@app.get("/api/evaluations", response_model=list[EvaluationFull])
+def get_all_evaluations():
+    """Obtener todas las Evaluations"""
     connection = None
     cursor = None
     try:
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
-        
-        query = "SELECT * FROM mdl_gradingform_utb_lvl WHERE id = %s"
-        cursor.execute(query, (level_id,))
-        result = cursor.fetchone()
-        
-        if not result:
-            raise HTTPException(status_code=404, detail="Nivel no encontrado")
-        
-        return result
-    except Error as e:
-        raise HTTPException(status_code=500, detail=f"Error al consultar nivel: {str(e)}")
-    finally:
-        close_db_connection(connection, cursor)
-
-# ==================== EVALUATIONS ====================
-@app.get("/api/evaluations", response_model=List[Evaluation])
-def get_evaluations(
-    student_id: Optional[int] = Query(None, description="Filtrar por ID de estudiante"),
-    indicator_id: Optional[int] = Query(None, description="Filtrar por ID de indicador"),
-    limit: int = Query(100, ge=1, le=1000),
-    offset: int = Query(0, ge=0)
-):
-    """Obtener todas las evaluaciones realizadas"""
-    connection = None
-    cursor = None
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-        
-        query = "SELECT * FROM mdl_gradingform_utb_evaluations WHERE 1=1"
-        params = []
-        
-        if student_id is not None:
-            query += " AND studentid = %s"
-            params.append(student_id)
-        
-        if indicator_id is not None:
-            query += " AND indicatorid = %s"
-            params.append(indicator_id)
-        
-        query += " ORDER BY timecreated DESC, id LIMIT %s OFFSET %s"
-        params.extend([limit, offset])
-        
-        cursor.execute(query, params)
+        query = "SELECT id, instanceid, studentid, courseid, activityid, activityname, student_outcome_id, indicator_id, performance_level_id, score, feedback, timecreated, timemodified FROM mdl_gradingform_utb_evaluations"
+        cursor.execute(query)
         results = cursor.fetchall()
-        
-        return results
+        evaluations = [EvaluationFull(**row) for row in results]
+        return evaluations
     except Error as e:
-        raise HTTPException(status_code=500, detail=f"Error al consultar evaluations: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error al consultar evaluaciones: {str(e)}")
     finally:
         close_db_connection(connection, cursor)
 
-@app.get("/api/evaluations/{evaluation_id}", response_model=Evaluation)
-def get_evaluation_by_id(evaluation_id: int):
-    """Obtener una evaluación específica por ID"""
-    connection = None
-    cursor = None
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-        
-        query = "SELECT * FROM mdl_gradingform_utb_evaluations WHERE id = %s"
-        cursor.execute(query, (evaluation_id,))
-        result = cursor.fetchone()
-        
-        if not result:
-            raise HTTPException(status_code=404, detail="Evaluación no encontrada")
-        
-        return result
-    except Error as e:
-        raise HTTPException(status_code=500, detail=f"Error al consultar evaluación: {str(e)}")
-    finally:
-        close_db_connection(connection, cursor)
+# ==================== ENDPOINTS ADICIONALES ====================
 
-# ==================== ENDPOINTS COMBINADOS PARA ANÁLISIS ====================
 @app.get("/api/student-performance/{student_id}")
 def get_student_performance(student_id: int):
     """Obtener el desempeño completo de un estudiante con detalles de outcomes, indicators y levels"""
@@ -359,20 +220,22 @@ def get_student_performance(student_id: int):
         SELECT 
             e.id as evaluation_id,
             e.studentid,
+            e.score,
+            e.feedback,
             e.timecreated,
-            e.remark,
             o.id as outcome_id,
-            o.name as outcome_name,
+            o.so_number,
+            o.title_en as outcome_name,
             i.id as indicator_id,
-            i.name as indicator_name,
+            i.indicator_letter,
             l.id as level_id,
-            l.level as level_number,
-            l.name as level_name,
-            l.score
+            l.title_en as level_name,
+            l.minscore,
+            l.maxscore
         FROM mdl_gradingform_utb_evaluations e
-        INNER JOIN mdl_gradingform_utb_indicators i ON e.indicatorid = i.id
-        INNER JOIN mdl_gradingform_utb_outcomes o ON i.outcomeid = o.id
-        INNER JOIN mdl_gradingform_utb_lvl l ON e.levelid = l.id
+        INNER JOIN mdl_gradingform_utb_indicators i ON e.indicator_id = i.id
+        INNER JOIN mdl_gradingform_utb_outcomes o ON i.student_outcome_id = o.id
+        INNER JOIN mdl_gradingform_utb_lvl l ON e.performance_level_id = l.id
         WHERE e.studentid = %s
         ORDER BY e.timecreated DESC
         """
@@ -411,7 +274,7 @@ def get_outcome_summary(outcome_id: int):
         
         # Obtener indicadores del outcome
         cursor.execute(
-            "SELECT * FROM mdl_gradingform_utb_indicators WHERE outcomeid = %s ORDER BY sortorder",
+            "SELECT * FROM mdl_gradingform_utb_indicators WHERE student_outcome_id = %s ORDER BY id",
             (outcome_id,)
         )
         indicators = cursor.fetchall()
@@ -419,7 +282,7 @@ def get_outcome_summary(outcome_id: int):
         # Para cada indicador, obtener sus niveles
         for indicator in indicators:
             cursor.execute(
-                "SELECT * FROM mdl_gradingform_utb_lvl WHERE indicatorid = %s ORDER BY level",
+                "SELECT * FROM mdl_gradingform_utb_lvl WHERE indicator_id = %s ORDER BY sortorder",
                 (indicator['id'],)
             )
             indicator['levels'] = cursor.fetchall()
