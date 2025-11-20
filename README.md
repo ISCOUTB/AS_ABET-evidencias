@@ -15,7 +15,7 @@ Esta API REST conecta Oracle APEX con la base de datos de Moodle (corriendo en D
 2. Crear un entorno virtual:
    ```powershell
    python -m venv venv
-   .\venv\Scripts\Activate.ps1
+   .\venv\Scripts\Activate
    ```
 
 3. Instalar dependencias:
