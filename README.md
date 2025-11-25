@@ -60,90 +60,108 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 # Opción 2: Sin recarga (producción)
 python main.py
 ```
-# ABET Evaluation API — Instrucciones mínimas
+# ABET Evaluation API
 
-Este repositorio contiene una pequeña API en FastAPI para consultar estadísticas y reportes de Student Outcomes (`mdl_gradingform_utb_*`) sobre una instalación Moodle.
+Breve descripción
+------------------
+API en FastAPI que expone endpoints para consultar Student Outcomes y estadísticas de evaluaciones usando tablas del plugin `gradingform_utb` en Moodle.
 
-Objetivo de esta limpieza: dejar sólo lo necesario para ejecutar la API localmente.
-
-Archivos que quedan en el repositorio:
-- `main.py` - La aplicación FastAPI.
-- `requirements.txt` - Dependencias necesarias.
-- `README.md` - Esta guía mínima.
-- `.env.example` - Ejemplo de variables de entorno.
+Contenido del repositorio
+-------------------------
+- `main.py`: aplicación FastAPI.
+- `requirements.txt`: dependencias.
+- `README.md`: esta documentación.
+- `.env.example`: ejemplo de variables de entorno.
 
 Requisitos
-- Python 3.8+
-- Acceso a la base de datos MySQL/MariaDB con las tablas de Moodle y del plugin `gradingform_utb`.
+---------
+- Python 3.8 o superior
+- MySQL/MariaDB con la base de datos Moodle que contiene las tablas `mdl_*` y `mdl_gradingform_utb_*` del plugin
 
-Variables de entorno (copiar `.env.example` a `.env` y rellenar):
-- `DB_HOST` - host de la BD
-- `DB_PORT` - puerto (por defecto 3306)
-- `DB_USER` - usuario
-- `DB_PASSWORD` - contraseña
-- `DB_NAME` - nombre de la base de datos (p.ej. `moodle`)
-- `API_KEY` - (opcional) clave para proteger los endpoints
-- `SSL_CERTFILE` - (opcional) ruta a archivo PEM del certificado para HTTPS
-- `SSL_KEYFILE` - (opcional) ruta a archivo PEM de la clave privada para HTTPS
+Variables de entorno
+--------------------
+Copiar `.env.example` a `.env` y completar los valores:
 
-Instalación rápida
-1. Crear y activar entorno virtual
+- `DB_HOST` (host de la base de datos)
+- `DB_PORT` (puerto, por defecto `3306`)
+- `DB_USER` (usuario de BD)
+- `DB_PASSWORD` (contraseña de BD)
+- `DB_NAME` (nombre de la BD, p. ej. `moodle`)
+- `API_KEY` (opcional, para proteger endpoints)
+- `SSL_CERTFILE` (opcional, ruta a certificado PEM para HTTPS)
+- `SSL_KEYFILE` (opcional, ruta a key PEM para HTTPS)
+
+Instalación
+-----------
+1. Crear y activar un entorno virtual:
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 ```
-2. Instalar dependencias
+
+2. Instalar dependencias:
+
 ```bash
 pip install -r requirements.txt
 ```
-3. Copiar y editar variables de entorno
+
+3. Configurar variables de entorno:
+
 ```bash
 cp .env.example .env
 # editar .env con tus valores
 ```
 
-Ejecutar la API
+Ejecución
+---------
 - Desarrollo (recarga automática):
+
 ```bash
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
-- Ejecutar por defecto (el script `main.py` activará TLS si `SSL_CERTFILE` y `SSL_KEYFILE` están definidos):
+
+- Producción (el bloque `__main__` en `main.py` activa TLS si `SSL_CERTFILE` y `SSL_KEYFILE` están definidas):
+
 ```bash
 python main.py
 ```
 
-HTTPS local (desarrollo con certificado auto-firmado)
-1. Generar certificado y clave para `localhost` (solo para pruebas):
+HTTPS local (opcional)
+----------------------
+Generar certificado auto-firmado para pruebas:
+
 ```bash
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout server.key -out server.crt -subj "/CN=localhost"
-```
-2. Exportar variables de entorno y ejecutar:
-```bash
 export SSL_CERTFILE="$PWD/server.crt"
 export SSL_KEYFILE="$PWD/server.key"
 python main.py
 ```
-Luego acceder por: `https://localhost:8000` (tu navegador mostrará advertencia por certificado auto-firmado).
-
-Recomendación para producción
-- Usa un reverse-proxy (Nginx, Caddy, Traefik) para gestionar TLS y exponer la app.
-- No expongas Uvicorn directamente a Internet sin proxy.
 
 Endpoints principales
-- `GET /health` — comprobación de salud (no requiere API key)
-- `GET /api/outcomes` — lista de student outcomes (soporta `teacher_id` y `teacher_name` como query params)
-- `GET /api/outcome-report/{outcome_id}` — reporte enriquecido (cursos, profesores, estudiantes calificados, programas)
+--------------------
+- `GET /health` — comprobación de salud (sin API key)
+- `GET /api/outcomes` — listar student outcomes; acepta `teacher_id` y `teacher_name` como filtros opcionales
+- `GET /api/indicators/{outcome_id}` — indicadores de un outcome
+- `GET /api/levels/{indicator_id}` — niveles de desempeño de un indicador
+- `GET /api/evaluations/{student_id}` — evaluaciones de un estudiante
+- `GET /api/outcome-summary/{outcome_id}` — resumen del outcome
+- `GET /api/outcome-report/{outcome_id}` — reporte enriquecido con cursos, profesores y lista de estudiantes calificados (incluye programa si está disponible)
 
-Probar la API (ejemplos)
+Ejemplos de uso
+---------------
 ```bash
 # Health
-curl https://localhost:8000/health --insecure
+curl http://localhost:8000/health
 
-# Obtener reporte (con API key)
-curl -H "X-API-Key: TU_API_KEY" https://localhost:8000/api/outcome-report/1 --insecure
+# Obtener outcomes
+curl -H "X-API-Key: TU_API_KEY" "http://localhost:8000/api/outcomes"
+
+# Obtener reporte enriquecido
+curl -H "X-API-Key: TU_API_KEY" "http://localhost:8000/api/outcome-report/1"
 ```
 
-Si necesitas que deje archivos o documentación adicionales, dime cuáles y los conservo. Esta limpieza elimina scripts de prueba y documentación interna relacionada con APEX para dejar un repo mínimo y operativo.
+Despliegue recomendado
+----------------------
+Usar un reverse-proxy (Nginx, Caddy o Traefik) para gestionar TLS en producción. No se recomienda exponer Uvicorn directamente a Internet sin proxy.
 
----
-Actualizado: instrucciones mínimas para poner en marcha la API.
