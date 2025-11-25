@@ -10,7 +10,7 @@
 
 ### 1. Instalar dependencias
 
-```powershell
+```bash
 # Crear entorno virtual (recomendado)
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -21,12 +21,12 @@ pip install -r requirements.txt
 
 ### 2. Configurar variables de entorno
 
-```powershell
+```bash
 # Copiar el archivo de ejemplo
 cp .env.example .env
 
 # Editar .env con tus credenciales
-notepad .env
+vim .env
 ```
 
 Configuración necesaria en `.env`:
@@ -41,7 +41,7 @@ API_KEY=tu_api_key_opcional
 
 ### 3. Ejecutar la API
 
-```powershell
+```bash
 # Opción 1: Con recarga automática (desarrollo)
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
@@ -152,5 +152,6 @@ curl -H "X-API-Key: TU_API_KEY" "http://localhost:8000/api/outcome-report/1"
 Despliegue recomendado
 ----------------------
 Usar un reverse-proxy (Nginx, Caddy o Traefik) para gestionar TLS en producción. No se recomienda exponer Uvicorn directamente a Internet sin proxy.
+
 
 
