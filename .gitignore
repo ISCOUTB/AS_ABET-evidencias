@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+env/
+.venv/
+venv/
+
+# Virtualenv
+.venv/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# IDEs
+.vscode/
+.idea/
+
+# System
+.DS_Store
+
+# Env files
+.env
+.env.local
+.env.*.local
+
+# Keys / certs
+*.key
+*.pem
+*.crt
+
+# Byte-compiled
+*.pyc
+
+# Logs
+*.log
+
+# pytest cache
+.pytest_cache/
+
+# other
+archive/
